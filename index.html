@@ -1,0 +1,594 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ingresa el Año</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      background: linear-gradient(135deg, #ff9ac1, #ffc1cc);
+      overflow: hidden;
+    }
+    #lock-screen {
+      text-align: center;
+      background-color: rgba(255, 128, 153, 0.95);
+      padding: 30px;
+      border-radius: 20px;
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+      width: 300px;
+      max-width: 90%;
+      border: 1.5px solid #000000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    h1 {
+      color: #333;
+      font-size: 20px;
+      margin-bottom: 20px;
+      font-weight: normal;
+    }
+    #display {
+      width: 80%;
+      padding: 12px;
+      font-size: 18px;
+      border: 1.5px solid #000000;
+      border-radius: 10px;
+      text-align: center;
+      margin-bottom: 20px;
+      background-color: #fff;
+      outline: none;
+      font-family: monospace;
+      box-sizing: border-box;
+    }
+    .keypad {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 20px;
+      max-width: 200px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .key {
+      padding: 15px;
+      font-size: 20px;
+      background-color: #f0f0f0;
+      color: #333;
+      border: 1px solid #ccc;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+    .key:hover {
+      background-color: #e0e0e0;
+    }
+    .key:active {
+      background-color: #d0d0d0;
+    }
+    #resultado {
+      margin-top: 20px;
+      font-size: 16px;
+      color: #333;
+    }
+
+    /* --- SECCIÓN DE LA CARTA --- */
+    #new-section {
+      display: none;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 500px;
+      height: 300px;
+    }
+    .envelope {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      background: #ffccd5;
+      border: 2px solid #ff4d6d;
+      border-radius: 10px;
+      overflow: hidden;
+      perspective: 1200px; /* necesario para 3D */
+    }
+    .triangle {
+      position: absolute;
+      width: 0;
+      height: 0;
+      border-style: solid;
+    }
+    /* Parte de arriba (tapa que abre hacia arriba) */
+    #triangle1 {
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      border-width: 150px 250px 0 250px;
+      border-color: #ff8099 transparent transparent transparent;
+      z-index: 5; /* la tapa debe estar arriba inicialmente */
+      transform-origin: top center;  /* 👉 ahora se abre desde arriba */
+      transition: transform 1s ease, z-index 0s 1s; /* z-index cambia después de la animación */
+    }
+    /* Parte de abajo */
+    #triangle2 {
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      border-width: 0 250px 150px 250px;
+      border-color: transparent transparent #ff8099 transparent;
+      z-index: 3;
+    }
+    /* Parte izquierda */
+    #triangle3 {
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      border-width: 150px 0 150px 250px;
+      border-color: transparent transparent transparent #ff99ac;
+      z-index: 3;
+    }
+    /* Parte derecha */
+    #triangle4 {
+      right: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      border-width: 150px 250px 150px 0;
+      border-color: transparent #ff99ac transparent transparent;
+      z-index: 3;
+    }
+
+    /* Animación de la tapa (punta hacia arriba) */
+    .open #triangle1 {
+      transform: translateX(-50%) rotateX(180deg);
+      z-index: 1; /* Detrás de la nota */
+    }
+
+    /* Botón que actúa como nota */
+    .note-button {
+      position: absolute;
+      top: 25%;
+      left: 50%;
+      transform: translate(-50%, 30%) scale(0.9); /* Inicia más abajo */
+      width: 90%;
+      height: 70%;
+      background: #fff;
+      border: 2px solid #ff4d6d;
+      border-radius: 10px;
+      padding: 20px;
+      font-family: "Courier New", monospace;
+      font-size: 16px;
+      text-align: center;
+      opacity: 0;
+      z-index: 2; /* Encima de #triangle1 pero debajo de los otros triángulos */
+      transition: opacity 1s ease 0.5s, transform 2s ease 0.5s; /* Animación inicial */
+      cursor: pointer;
+      color: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow-y: auto;
+    }
+    .open .note-button {
+      opacity: 1;
+      transform: translate(-50%, -30%) scale(0.9); /* Sube dentro del perímetro de la carta */
+    }
+    .note-button.show-front {
+      z-index: 10; /* Encima de todos los triángulos y corazones */
+      transform: translate(-50%, -30%) scale(1); /* Ligeramente más grande para énfasis */
+      transition: z-index 0s, transform 0.5s ease; /* Animación suave al hacer clic */
+    }
+
+    /* Corazón en el centro como botón */
+    .heart {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(-45deg);
+      width: 42px; /* Reducido de 60px a 42px (30% menos) */
+      height: 42px; /* Reducido de 60px a 42px */
+      background-color: red;
+      cursor: pointer;
+      z-index: 10;
+      transition: opacity 0.5s ease;
+    }
+    .heart::before,
+    .heart::after {
+      content: "";
+      position: absolute;
+      width: 42px; /* Reducido de 60px a 42px */
+      height: 42px; /* Reducido de 60px a 42px */
+      background-color: red;
+      border-radius: 50%;
+    }
+    .heart::before {
+      top: -21px; /* Reducido de -30px a -21px */
+      left: 0;
+    }
+    .heart::after {
+      top: 0;
+      left: 21px; /* Reducido de 30px a 21px */
+    }
+    /* Cuando desaparece el corazón */
+    .hide-heart {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* Corazoncitos alrededor de la carta */
+    .small-heart {
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      background-color: red;
+      transform: rotate(-45deg);
+      opacity: 0;
+      z-index: 4; /* Encima de los triángulos pero debajo del corazón central */
+      transition: opacity 1s ease 0.5s, transform 1s ease 0.5s;
+    }
+    .small-heart::before,
+    .small-heart::after {
+      content: "";
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      background-color: red;
+      border-radius: 50%;
+    }
+    .small-heart::before {
+      top: -10px;
+      left: 0;
+    }
+    .small-heart::after {
+      top: 0;
+      left: 10px;
+    }
+    .open .small-heart {
+      opacity: 0.8;
+    }
+    /* Posiciones de los corazoncitos */
+    #heart-top-left {
+      top: -30px;
+      left: 50px;
+      transform: rotate(-45deg) translate(0, 10px);
+    }
+    .open #heart-top-left {
+      transform: rotate(-45deg) translate(0, -10px);
+    }
+    #heart-top-right {
+      top: -30px;
+      right: 50px;
+      transform: rotate(-45deg) translate(0, 10px);
+    }
+    .open #heart-top-right {
+      transform: rotate(-45deg) translate(0, -10px);
+    }
+    #heart-bottom-left {
+      bottom: -30px;
+      left: 50px;
+      transform: rotate(-45deg) translate(0, -10px);
+    }
+    .open #heart-bottom-left {
+      transform: rotate(-45deg) translate(0, 10px);
+    }
+    #heart-bottom-right {
+      bottom: -30px;
+      right: 50px;
+      transform: rotate(-45deg) translate(0, -10px);
+    }
+    .open #heart-bottom-right {
+      transform: rotate(-45deg) translate(0, 10px);
+    }
+    #heart-left-top {
+      left: -30px;
+      top: 50px;
+      transform: rotate(-45deg) translate(10px, 0);
+    }
+    .open #heart-left-top {
+      transform: rotate(-45deg) translate(-10px, 0);
+    }
+    #heart-right-top {
+      right: -30px;
+      top: 50px;
+      transform: rotate(-45deg) translate(-10px, 0);
+    }
+    .open #heart-right-top {
+      transform: rotate(-45deg) translate(10px, 0);
+    }
+
+    /* Estilo del botón "Dejar de leer" */
+    #close-button {
+      display: none;
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 16px;
+      font-family: Arial, sans-serif;
+      background-color: #ff4d6d;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+    #close-button:hover {
+      background-color: #e0435f;
+    }
+    #close-button:active {
+      background-color: #cc3b55;
+    }
+    .open ~ #close-button {
+      display: block;
+    }
+
+    /* Estilo del texto encima de la carta */
+    #open-instruction {
+      margin-bottom: 20px;
+      font-size: 18px;
+      font-family: Arial, sans-serif;
+      color: #333;
+      text-align: center;
+      font-weight: bold;
+      text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.8);
+    }
+
+    /* Estilo del botón "Siguiente" */
+    #next-button {
+      display: none;
+      position: absolute;
+      top: 365px; /* Justo debajo del sobre (300px altura + 20px margen) */
+      right: -5px; /* Alineado a la derecha */
+      padding: 10px 20px;
+      font-size: 16px;
+      font-family: Arial, sans-serif;
+      background-color: #ff4d6d;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+    #next-button:hover {
+      background-color: #e0435f;
+    }
+    #next-button:active {
+      background-color: #cc3b55;
+    }
+
+    /* Estilo de la nueva sección con enlace */
+    #hello-world-section {
+      display: none;
+      text-align: center;
+      background-color: rgba(255, 128, 153, 0.95);
+      padding: 30px;
+      border-radius: 20px;
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+      width: 300px;
+      max-width: 90%;
+      border: 1.5px solid #000000;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+    #hello-world-section h2 {
+      color: #333;
+      font-size: 20px;
+      font-weight: bold;
+      margin-bottom: 20px;
+    }
+    #hello-world-section a {
+      color: #ff4d6d;
+      font-size: 18px;
+      text-decoration: none;
+      font-family: "Courier New", monospace;
+      padding: 10px 20px;
+      border: 2px solid #ff4d6d;
+      border-radius: 10px;
+      display: inline-block;
+      transition: background-color 0.3s, color 0.3s;
+    }
+    #hello-world-section a:hover {
+      background-color: #ff4d6d;
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <!-- Pantalla inicial -->
+  <div id="lock-screen">
+    <h1>¿En qué año nos conocimos?</h1>
+    <div id="display" tabindex="0" contenteditable="true"></div>
+    <div class="keypad">
+      <div class="key" onclick="appendNumber('1')">1</div>
+      <div class="key" onclick="appendNumber('2')">2</div>
+      <div class="key" onclick="appendNumber('3')">3</div>
+      <div class="key" onclick="appendNumber('4')">4</div>
+      <div class="key" onclick="appendNumber('5')">5</div>
+      <div class="key" onclick="appendNumber('6')">6</div>
+      <div class="key" onclick="appendNumber('7')">7</div>
+      <div class="key" onclick="appendNumber('8')">8</div>
+      <div class="key" onclick="appendNumber('9')">9</div>
+      <div class="key" onclick="clearDisplay()">C</div>
+      <div class="key" onclick="appendNumber('0')">0</div>
+      <div class="key" onclick="mostrarAno()">OK</div>
+    </div>
+    <p id="resultado"></p>
+  </div>
+
+  <!-- Carta -->
+  <div id="new-section">
+    <div id="open-instruction">Abre la carta tocando el corazón</div>
+    <div class="envelope" id="envelope">
+      <div class="triangle" id="triangle1"></div>
+      <div class="triangle" id="triangle2"></div>
+      <div class="triangle" id="triangle3"></div>
+      <div class="triangle" id="triangle4"></div>
+
+      <button class="note-button" id="noteBtn">
+        Sabes que soy de pocas palabras... Pero quiero decirte que eres maravillosa, me gusta todo de tí, de verdad... lo único q no me gusta es q tienes mejor amigo, F... ayyyyy, mi chica 	preciosa, hermosa, bella, chula, Eres Perfecta..!! 
+	teAmo_DayannaconcobleN ❤️.ㅤㅤRecordatorio: no me engañes, demoré un qlo haciendo este código :(
+      </button>
+
+      <div class="heart" id="heartBtn" onclick="abrirCarta()"></div>
+    </div>
+    <!-- Corazoncitos alrededor de la carta -->
+    <div class="small-heart" id="heart-top-left"></div>
+    <div class="small-heart" id="heart-top-right"></div>
+    <div class="small-heart" id="heart-bottom-left"></div>
+    <div class="small-heart" id="heart-bottom-right"></div>
+    <div class="small-heart" id="heart-left-top"></div>
+    <div class="small-heart" id="heart-right-top"></div>
+    <!-- Botón "Dejar de leer" -->
+    <button id="close-button" onclick="cerrarCarta()">Dejar de leer</button>
+    <!-- Botón "Siguiente" -->
+    <button id="next-button" onclick="showHelloWorld()">Siguiente</button>
+  </div>
+
+  <!-- Nueva sección con enlace -->
+  <div id="hello-world-section">
+    <h2>Abre el enlace DayannacondobleN</h2>
+    <a href="https://te-deseo-feliz-21-de-septiembre.netlify.app/" target="_blank">Visitar enlace</a>
+  </div>
+
+  <script>
+    let currentInput = '';
+
+    function appendNumber(num) {
+      if (currentInput.length < 4) {
+        currentInput += num;
+        document.getElementById('display').textContent = currentInput;
+      }
+    }
+
+    function clearDisplay() {
+      currentInput = '';
+      document.getElementById('display').textContent = '';
+      document.getElementById('resultado').textContent = '';
+      document.getElementById('new-section').style.display = 'none';
+      document.getElementById('next-button').style.display = 'none';
+      document.getElementById('hello-world-section').style.display = 'none';
+    }
+
+    document.getElementById('display').addEventListener('keydown', function(event) {
+      const key = event.key;
+      if (/^\d$/.test(key) && currentInput.length < 4) {
+        currentInput += key;
+        this.textContent = currentInput;
+        event.preventDefault();
+      } else if (key === 'Backspace') {
+        currentInput = currentInput.slice(0, -1);
+        this.textContent = currentInput;
+        event.preventDefault();
+      } else if (key === 'Enter') {
+        mostrarAno();
+        event.preventDefault();
+      } else {
+        event.preventDefault(); // Prevenir cualquier otra entrada no válida
+      }
+    });
+
+    function mostrarAno() {
+      const resultado = document.getElementById('resultado');
+      const lockScreen = document.getElementById('lock-screen');
+      const newSection = document.getElementById('new-section');
+      const helloWorldSection = document.getElementById('hello-world-section');
+      
+      // Validar que el input tenga exactamente 4 dígitos desde el inicio
+      if (/^\d{4}$/.test(currentInput)) {
+        const ano = parseInt(currentInput);
+        if (ano >= 1000 && ano <= 9999 && ano === 2023) {
+          resultado.textContent = '';
+          lockScreen.style.display = 'none';
+          newSection.style.display = 'block';
+          helloWorldSection.style.display = 'none';
+        } else {
+          resultado.textContent = 'ESE AÑO NO ES OE 😒';
+          newSection.style.display = 'none';
+          helloWorldSection.style.display = 'none';
+        }
+      } else {
+        resultado.textContent = 'Por favor, ingresa un año válido de 4 dígitos';
+        newSection.style.display = 'none';
+        helloWorldSection.style.display = 'none';
+      }
+    }
+
+    function abrirCarta() {
+      const envelope = document.getElementById('envelope');
+      const heartBtn = document.getElementById('heartBtn');
+      const noteBtn = document.getElementById('noteBtn');
+      const closeButton = document.getElementById('close-button');
+      const nextButton = document.getElementById('next-button');
+      envelope.classList.add('open');
+      heartBtn.classList.add('hide-heart');
+      noteBtn.classList.add('show-front');
+      closeButton.style.display = 'block';
+      nextButton.style.display = 'block';
+    }
+
+    function cerrarCarta() {
+      const envelope = document.getElementById('envelope');
+      const heartBtn = document.getElementById('heartBtn');
+      const noteBtn = document.getElementById('noteBtn');
+      const closeButton = document.getElementById('close-button');
+      const nextButton = document.getElementById('next-button');
+      envelope.classList.remove('open');
+      heartBtn.classList.remove('hide-heart');
+      noteBtn.classList.remove('show-front');
+      closeButton.style.display = 'none';
+      nextButton.style.display = 'block';
+    }
+
+    function showHelloWorld() {
+      const newSection = document.getElementById('new-section');
+      const helloWorldSection = document.getElementById('hello-world-section');
+      newSection.style.display = 'none';
+      helloWorldSection.style.display = 'block';
+    }
+  </script>
+</body>
+</html>
